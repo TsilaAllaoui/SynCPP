@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.7.34031.279
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Copier", "Copier.vcxproj", "{BFE6A625-F376-4E80-99FE-E5887B8E3595}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Syncpp", "Syncpp.vcxproj", "{BFE6A625-F376-4E80-99FE-E5887B8E3595}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
