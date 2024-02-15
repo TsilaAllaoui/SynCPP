@@ -1,7 +1,9 @@
+#include <unordered_map>
 #include <filesystem>
 #include <iostream>
-#include <unordered_map>
 #include <set>
+
+#include <CLI11.hpp>
 
 namespace fs = std::filesystem;
 
@@ -57,8 +59,9 @@ void syncFiles(const std::vector<std::string>& folders, std::unordered_map <fs::
 							) {
 
 							fileToWTime.emplace(std::make_pair(entryPath, fs::file_time_type::clock::now()));
-							std::cout << "Synching " << entryPath << std::endl;
+
 							if (currEntry.is_regular_file()) {
+								std::cout << "Synching " << entryPath << std::endl;
 								fs::copy_file(currEntry, entryPath);
 							}
 							else {
@@ -83,31 +86,26 @@ void syncFiles(const std::vector<std::string>& folders, std::unordered_map <fs::
 
 int main(int argc, char** argv) {
 
-	if (argc != 3) {
-		if (argv[1] != "-h" && argv[1] != "--help") {
-			std::cout << "Arguments error. Need at least two folder path." << std::endl;
-		}
-		std::cout << "Usage: " << std::endl << "\tsyncpp [folder_path1] [folder_path2] ...";
-		return 1;
-	}
+	CLI::App app;
 
-	int timeout = 10;
-	if (argc == 4) {
-		timeout = std::stoi(argv[3]);
-	}
+	int interval = 1;
+	app.add_option("-i, --interval", interval, "Set the interval timeout for rechecking files (optional)");
 
 	std::vector<std::string> folders;
-	for (int i = 1; i < argc; i++) {
-		folders.emplace_back(argv[i]);
-	}
+	app.add_option("-f, --folders", folders, "Folders to be synched (at least 2 required)")->required()->expected(2);
 
-	std::vector<std::string> folders = { "D:\\tests\\a", "D:\\tests\\b" };
+	bool noDelay = false;
+	app.add_flag("-n, --no-delay", noDelay, "Disable wait time interval");
+
+	CLI11_PARSE(app, argc, argv);
 
 	std::unordered_map <fs::path, fs::file_time_type> fileToWTime;
 
 	while (true) {
 		syncFiles(folders, fileToWTime);
-		std::this_thread::sleep_for(std::chrono::seconds(10));
+		if (!noDelay) {
+			std::this_thread::sleep_for(std::chrono::seconds(interval));
+		}
 	}
 
 	return 0;
