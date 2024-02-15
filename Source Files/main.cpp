@@ -27,6 +27,17 @@ void syncFiles(const std::vector<std::string>& folders, std::unordered_map <fs::
 		}
 	}
 
+	std::vector<fs::path> erased;
+	auto fileToWTimeCopy = fileToWTime;
+	for (const auto& [path, lastWriteTime] : fileToWTime) {
+		if (!fs::exists(path)) {
+			std::cout << "File " << path << " has been deleted." << std::endl;
+			erased.emplace_back(path);
+			fileToWTimeCopy.erase(path);
+		}
+	}
+	fileToWTime = fileToWTimeCopy;
+
 	for (auto& [folder, entries] : folderToFiles) {
 		for (auto& [_folder, folderEntries] : allEntries) {
 			if (folder != _folder) {
@@ -44,7 +55,7 @@ void syncFiles(const std::vector<std::string>& folders, std::unordered_map <fs::
 							fileToWTime.emplace(std::make_pair(entryPath, fs::last_write_time(fs::path(entryPath))));
 
 							if (currEntry.is_regular_file()) {
-								fs::copy_file(currEntry, entryPath);
+								fs::copy_file(currEntry, entryPath, fs::copy_options::overwrite_existing);
 							}
 							else {
 								fs::create_directory(entryPath);
@@ -54,15 +65,25 @@ void syncFiles(const std::vector<std::string>& folders, std::unordered_map <fs::
 						auto pos = entryPath.find(_folder);
 						entryPath = folder + entryPath.substr(pos + _folder.size());
 
+						if (std::find(entries.begin(), entries.end(), fs::path(entryPath)) == entries.end() &&
+							std::find(erased.begin(), erased.end(), fs::path(entryPath)) != erased.end()
+							) {
+							fs::remove(fs::path(entryPath));
+							fs::remove(currEntry);
+							fileToWTime.erase(entryPath);
+							fileToWTime.erase(fs::path(entryPath));
+							continue;
+						}
+
 						if (std::find(entries.begin(), entries.end(), fs::path(entryPath)) == entries.end()
-							|| fs::last_write_time(currEntry) < fs::last_write_time(entryPath)
+							|| fs::last_write_time(currEntry) > fs::last_write_time(entryPath)
 							) {
 
 							fileToWTime.emplace(std::make_pair(entryPath, fs::file_time_type::clock::now()));
 
 							if (currEntry.is_regular_file()) {
 								std::cout << "Synching " << entryPath << std::endl;
-								fs::copy_file(currEntry, entryPath);
+								fs::copy_file(currEntry, entryPath, fs::copy_options::overwrite_existing);
 							}
 							else {
 								fs::create_directory(entryPath);
@@ -100,6 +121,8 @@ int main(int argc, char** argv) {
 	CLI11_PARSE(app, argc, argv);
 
 	std::unordered_map <fs::path, fs::file_time_type> fileToWTime;
+
+	folders = { "D:\\tests\\a", "D:\\tests\\b" };
 
 	while (true) {
 		syncFiles(folders, fileToWTime);
