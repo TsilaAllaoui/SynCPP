@@ -6,10 +6,12 @@
 #include <folderObserver.h>
 #include <utilities.h>
 #include <CLI11.hpp>
+#include <iostream>
 
 
 
 int main(int argc, char** argv) {
+
     CLI::App app;
     
     int interval = 1;

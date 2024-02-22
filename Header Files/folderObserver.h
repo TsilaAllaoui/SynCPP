@@ -1,11 +1,10 @@
 #pragma once
 
-#include <unordered_map>
+#include <unordered_set>
 #include <filesystem>
 #include <Windows.h>
 #include <iostream>
 #include <thread>
-#include <queue>
 
 #include <changeEvent.h>
 
@@ -25,7 +24,7 @@ public:
     FolderObserver& operator=(const FolderObserver&) = delete;
     ~FolderObserver();
 
-    static std::queue<ChangeEvent> changes_;
+    static std::vector<ChangeEvent> changes_;
 
     void observeChanges();
 };

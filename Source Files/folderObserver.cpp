@@ -1,6 +1,6 @@
 #include <folderObserver.h>
 
-std::queue<ChangeEvent> FolderObserver::changes_;
+std::vector<ChangeEvent> FolderObserver::changes_;
 
 FolderObserver::FolderObserver(const std::wstring& folder) : folder_(folder) {
     directory_handle_ = CreateFile(folder.c_str(), FILE_LIST_DIRECTORY,
@@ -18,11 +18,11 @@ FolderObserver::~FolderObserver() {
 }
 
 void FolderObserver::observeChanges() {
-    DWORD bytes_returned;
-    char buffer[4096];
-    FILE_NOTIFY_INFORMATION* info = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(buffer);
-
     while (true) {
+        DWORD bytes_returned;
+        char buffer[4096];
+        FILE_NOTIFY_INFORMATION* info = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(buffer);
+
         if (!ReadDirectoryChangesW(directory_handle_, buffer, sizeof(buffer), TRUE,
             FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |
             FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE,
@@ -32,35 +32,51 @@ void FolderObserver::observeChanges() {
         }
 
         while (info) {
-            std::wstring fileName(info->FileName, info->FileNameLength / sizeof(WCHAR));
-            //std::wstring filePath = folder_ + L'\\' + fileName;
-            switch (info->Action) {
-            case FILE_ACTION_ADDED: {
-                ChangeEvent::mutex.lock();
-                changes_.emplace(ChangeEvent(ChangeEvent::eventType::ADD, fs::path(fileName), folder_));
+            try {
+                std::wstring fileName(info->FileName, info->FileNameLength / sizeof(WCHAR));
+                switch (info->Action) {
+                case FILE_ACTION_ADDED: {
+                    std::lock_guard<std::mutex> lock(ChangeEvent::mutex);
+                    auto event = ChangeEvent(ChangeEvent::eventType::ADD, fs::path(fileName), folder_);
+                    changes_.emplace_back(event);
+                    break;
+                }
+                case FILE_ACTION_REMOVED: {
+                    std::lock_guard<std::mutex> lock(ChangeEvent::mutex);
+                    auto event = ChangeEvent(ChangeEvent::eventType::REMOVE, fs::path(fileName), folder_);
+                    changes_.emplace_back(event);
+                    break;
+                }
+                case FILE_ACTION_MODIFIED: {
+                    if (!fs::is_directory(fs::path(folder_) / fileName)) {
+                        std::lock_guard<std::mutex> lock(ChangeEvent::mutex);
+                        auto event = ChangeEvent(ChangeEvent::eventType::UPDATE, fs::path(fileName), folder_);
+                        changes_.emplace_back(event);
+                    }
+                    break;
+                }
+                case FILE_ACTION_RENAMED_NEW_NAME:
+                case FILE_ACTION_RENAMED_OLD_NAME: {
+                    auto newFileInfo = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(reinterpret_cast<char*>(info) + info->NextEntryOffset);
+                    std::wstring newFileName(newFileInfo->FileName, newFileInfo->FileNameLength / sizeof(WCHAR));
+                    std::lock_guard<std::mutex> lock(ChangeEvent::mutex);
+                    auto event = ChangeEvent(ChangeEvent::eventType::RENAME, fs::path(newFileName), fs::path(fileName), folder_);
+                    changes_.emplace_back(event);
+                    info = newFileInfo;
+                    break;
+                }
+                default:
+                    break;
+                }
+                if (info->NextEntryOffset == 0) {
+                    break;
+                }
+
+                info = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(reinterpret_cast<char*>(info) + info->NextEntryOffset);
             }
-                break;
-            case FILE_ACTION_REMOVED: {
-                ChangeEvent::mutex.lock();
-                changes_.emplace(ChangeEvent(ChangeEvent::eventType::REMOVE, fs::path(fileName), folder_));
+            catch (...) {
+                std::cout << "Name error:" << std::endl;
             }
-                break;
-            case FILE_ACTION_MODIFIED:
-            case FILE_ACTION_RENAMED_NEW_NAME:
-            case FILE_ACTION_RENAMED_OLD_NAME: {
-                ChangeEvent::mutex.lock();
-                changes_.emplace(ChangeEvent(ChangeEvent::eventType::UPDATE, fs::path(fileName), folder_));
-            }
-                break;
-            default:
-                break;
-            }
-            if (info->NextEntryOffset == 0) {
-                ChangeEvent::mutex.unlock();
-                break;
-            }
-            info = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(reinterpret_cast<char*>(info) + info->NextEntryOffset);
-            ChangeEvent::mutex.unlock();
         }
     }
 }
